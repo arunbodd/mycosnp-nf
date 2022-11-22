@@ -167,7 +167,7 @@
                 },
                 "species": {
                     "type": "string",
-                    "default": "candida_auris_gca_016772135",
+                    "default": "candida_auris_gca_016772135.1",
                     "fa_icon": "fas fa-fast-forward",
                     "description": "Species name"
                 }

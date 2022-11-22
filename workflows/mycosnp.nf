@@ -23,7 +23,7 @@ if (params.skip_samples_file) { // check for skip_samples_file
 for (param in checkPathParamList) { if (param) { file(param, checkIfExists: true) } }
 
 // if (params.snpeffdb == null) { exit 1, 'Input path to snpeffdb not specified!' }
-if (params.snpeffconfig == null) { exit 1, 'Input snpeff config file not specified' }
+// if (params.snpeffconfig == null) { exit 1, 'Input snpeff config file not specified' }
 
 
 // Check mandatory parameters
@@ -323,10 +323,10 @@ workflow MYCOSNP {
         
 
         ch_versions = ch_versions.mix(GATK_VARIANTS.out.versions)
-
-        SNPEFF(
-            GATK4_HAPLOTYPECALLER.out.vcf, params.species
-            ) //params.snpeffdb
+        
+        if(params.snpeff != false){
+            SNPEFF(GATK_VARIANTS.out.filtered_vcf, params.species)
+        }
 
 /*
 ========================================================================================
