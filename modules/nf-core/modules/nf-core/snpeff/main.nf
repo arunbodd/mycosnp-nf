@@ -2,14 +2,14 @@ process SNPEFF {
     tag "$meta.id"
     label 'process_medium'
 
-    conda (params.enable_conda ? "bioconda::snpeff=5.1" : null)
+    conda (params.enable_conda ? "bioconda::snpeff=4.3" : null)
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://depot.galaxyproject.org/singularity/snpeff:5.1--hdfd78af_2' :
-        'quay.io/biocontainers/snpeff:5.1--hdfd78af_2' }"
+        'https://depot.galaxyproject.org/singularity/snpeff:4.3.1t--hdfd78af_5' :
+        'quay.io/biocontainers/snpeff:4.3.1t--hdfd78af_5' }"
 
     input:
     tuple val(meta), path(vcf)
-    val   db
+//    val   db
     path  cache
 
     output:
@@ -35,10 +35,9 @@ process SNPEFF {
     """
     snpEff \\
         -Xmx${avail_mem}g \\
-        $db \\
         $args \\
-        -csvStats ${prefix}.csv \\
         $cache_command \\
+        -csvStats ${prefix}.csv \\
         $vcf \\
         > ${prefix}.ann.vcf
 

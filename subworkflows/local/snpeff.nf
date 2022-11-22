@@ -2,14 +2,13 @@
 // Run Snpeff
 //
 
-include { SNPEFF              } from '../../modules/nf-core/modules/nf-core/snpeff/main'
-include { TABIX_BGZIPTABIX    } from '../../modules/nf-core/modules/nf-core/tabix/bgziptabix/main'
+include { SNPEFF as SNPEFF_ANN             } from '../../modules/local/snpeff_local'
+include { TABIX_BGZIPTABIX                 } from '../../modules/nf-core/modules/nf-core/tabix/bgziptabix/main'
 
 workflow SNPEFF {
     take:
     vcf                                             // channel: [val(meta), [ vcf ] ]
-    snpeffdb                                        // path   : snpEff database
-    snpeffconfig                                    // path   : snpEff config
+    species
 
     main:
 
@@ -18,21 +17,17 @@ workflow SNPEFF {
     //
     //SNPEFF
     //
-    println(vcf)
-    println(snpeffdb)
-    println(snpeffconfig)
 
-    
-    SNPEFF (
+   // snpeffdb    = file(snpeffdb, checkIfExists=true) // Change this to path or Channel.fromPath(karaken2db, checkifExits =true)
+    SNPEFF_ANN (
         vcf,
-        snpeffdb,
-        snpeffconfig
+        species
     )
-    ch_snpeff_vcf    = SNPEFF.out.vcf
-    ch_snpeff_csv    = SNPEFF.out.csv
-    ch_snpeff_txt    = SNPEFF.out.txt
-    ch_snpeff_html   = SNPEFF.out.html
-    ch_versions      = ch_versions.mix(SNPEFF.out.versions.first())
+    ch_snpeff_vcf    = SNPEFF_ANN.out.vcf
+    ch_snpeff_csv    = SNPEFF_ANN.out.report
+    ch_snpeff_txt    = SNPEFF_ANN.out.genes_txt
+    ch_snpeff_html   = SNPEFF_ANN.out.summary_html
+    ch_versions      = ch_versions.mix(SNPEFF_ANN.out.versions.first())
 
    //
     //ZIP & INDEXING VCF
@@ -43,7 +38,12 @@ workflow SNPEFF {
         ch_snpeff_vcf
     )
     ch_tabix_tbi     = TABIX_BGZIPTABIX.out.gz_tbi
-    ch_tabix_vcf     = TABIX_BGZIPTABIX.out.gz
+  //  ch_tabix_vcf     = TABIX_BGZIPTABIX.out.gz_tbi
+    ch_tabix_tbi.map { meta, gz, tbi ->
+
+        TABIX_BGZIPTABIX.out.gz_tbi
+    }
+    .view()
     ch_versions      = ch_versions.mix(TABIX_BGZIPTABIX.out.versions.first())
 
 

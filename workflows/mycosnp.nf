@@ -8,16 +8,23 @@
 
 def summary_params = NfcoreSchema.paramsSummaryMap(workflow, params)
 
+// params.snpeffdb = WorkflowMain.getGenomeAttribute(params, 'snpeffdb')
+params.snpeffconfig = WorkflowMain.getGenomeAttribute(params, 'snpeffconfig')
+
 
 // Validate input parameters
 WorkflowMycosnp.initialise(params, log)
 
 // Check input path parameters to see if they exist
-def checkPathParamList = [ params.input, params.multiqc_config, params.fasta]
+def checkPathParamList = [ params.input, params.multiqc_config, params.fasta ] // params.snpeffdb
 if (params.skip_samples_file) { // check for skip_samples_file
     checkPathParamList.add(params.skip_samples_file)
 }
 for (param in checkPathParamList) { if (param) { file(param, checkIfExists: true) } }
+
+// if (params.snpeffdb == null) { exit 1, 'Input path to snpeffdb not specified!' }
+if (params.snpeffconfig == null) { exit 1, 'Input snpeff config file not specified' }
+
 
 // Check mandatory parameters
 sra_list = []
@@ -317,6 +324,10 @@ workflow MYCOSNP {
 
         ch_versions = ch_versions.mix(GATK_VARIANTS.out.versions)
 
+        SNPEFF(
+            GATK4_HAPLOTYPECALLER.out.vcf, params.species
+            ) //params.snpeffdb
+
 /*
 ========================================================================================
                           SUBWORKFLOW: Create Phylogeny 
@@ -337,6 +348,7 @@ workflow MYCOSNP {
         if(! params.skip_phylogeny) {
             CREATE_PHYLOGENY(SEQKIT_REPLACE.out.fastx.map{meta, fas->[fas]}, '')
         }
+  
     }
 
      CUSTOM_DUMPSOFTWAREVERSIONS (
@@ -378,14 +390,14 @@ workflow MYCOSNP {
 
 /*
 ========================================================================================
-                          SUBWORKFLOW: Run SNPEFF_BUILD 
-    take:
-        fasta
-        gff
+    //                       SUBWORKFLOW: Run SNPEFF_BUILD 
+    // take:
+    //     fasta
+    //     gff
 
-    emit:
-        snpeffdb     
-        snpeffconfig
+    // emit:
+    //     snpeffdb     
+    //     snpeffconfig
 ========================================================================================
 */
 
@@ -399,28 +411,20 @@ workflow MYCOSNP {
    /*
 ========================================================================================
                           SUBWORKFLOW: Run SNPEFF 
-    take:
-        ch_snpeff_db
-        ch_snpeff_config
-        vcf
-        fasta (optional)
+    // take:
+    //     ch_snpeff_db
+    //     ch_snpeff_config
+    //     vcf
+    //     fasta (optional)
 
-    emit:
-        csv     
-        txt
-        html
-        tbi
-        vcf (gz)
+    // emit:
+    //     csv     
+    //     txt
+    //     html
+    //     tbi
+    //     vcf (gz)
 ========================================================================================
 */
-
-    if(params.snpeff == true)
-    {
-        SNPEFF(
-            ch_vcf_files, snpeffdb, snpeff_config
-        )
-    }
-
 }
 
 /*

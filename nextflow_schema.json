@@ -157,6 +157,19 @@
                     "fa_icon": "fas fa-ban",
                     "hidden": true,
                     "help_text": "Do not load `igenomes.config` when running the pipeline. You may choose this option if you observe clashes between custom parameters and those supplied in `igenomes.config`."
+                },
+                "snpeffconfig": {
+                    "type": "string",
+                    "format": "path",
+                    "default": "",
+                    "fa_icon": "fas fa-fast-forward",
+                    "description": "Full path to snpeff config"
+                },
+                "species": {
+                    "type": "string",
+                    "default": "candida_auris_gca_016772135",
+                    "fa_icon": "fas fa-fast-forward",
+                    "description": "Species name"
                 }
             }
         },
@@ -189,6 +202,12 @@
                     "default": true,
                     "description": "Build a tree using the FastTree approximate ML algorithm",
                     "fa_icon": "fas fa-tree"
+                },
+                "snpeff": {
+                    "type": "boolean",
+                    "default": true,
+                    "fa_icon": "fas fa-fast-forward",
+                    "description": "Do SNPEFF annotation."
                 },
                 "iqtree": {
                     "type": "boolean",
