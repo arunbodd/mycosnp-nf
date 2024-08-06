@@ -120,10 +120,10 @@ include { QC_REPORTSHEET              } from '../modules/local/qc_reportsheet.nf
 include { MULTIQC                     } from '../modules/nf-core/modules/multiqc/main'
 include { CUSTOM_DUMPSOFTWAREVERSIONS } from '../modules/nf-core/modules/custom/dumpsoftwareversions/main'
 include { GATK4_HAPLOTYPECALLER       } from '../modules/nf-core/modules/gatk4/haplotypecaller/main'
-include { GATK4_COMBINEGVCFS          } from '../modules/nf-core/modules/gatk4/combinegvcfs/main'
+include { GATK4_COMBINEGVCFS          } from '../modules/nf-core/modules/gatk4/combinegvcfs/main' //this module isn't being used.
 include { SEQKIT_REPLACE              } from '../modules/nf-core/modules/seqkit/replace/main'
 include { SNPDISTS                    } from '../modules/nf-core/modules/snpdists/main'
-include { GATK4_LOCALCOMBINEGVCFS     } from '../modules/local/gatk4_localcombinegvcfs.nf'
+include { GATK4_LOCALCOMBINEGVCFS     } from '../modules/local/gatk4_localcombinegvcfs.nf' //instead, this module is being used.
 
 /*
 ========================================================================================
@@ -279,7 +279,7 @@ workflow MYCOSNP {
 ========================================================================================
 */
 
-    GATK4_HAPLOTYPECALLER(  BWA_PREPROCESS.out.alignment_combined.map{meta, bam, bai            -> [ meta, bam, bai, [] ] },
+    GATK4_HAPLOTYPECALLER(  BWA_PREPROCESS.out.alignment_combined.map{meta, bam, bai -> [ meta, bam, bai, [] ] },
                             fas_file,
                             fai_file,
                             dict_file,
@@ -291,64 +291,78 @@ workflow MYCOSNP {
 
 
     ch_vcf_files = Channel.empty()
-    if(! params.skip_combined_analysis)
-    {
-
-        ch_vcf_files    = Channel.fromList(vcf_file_list)
+    if (!params.skip_combined_analysis) {
+        ch_vcf_files = Channel.fromList(vcf_file_list)
         ch_vcfidx_files = Channel.fromList(vcfidx_file_list)
 
-        ch_vcf = GATK4_HAPLOTYPECALLER.out.vcf.map{meta, vcf ->[ vcf ]  }.collect()
+        ch_vcf = GATK4_HAPLOTYPECALLER.out.vcf.map { meta, vcf -> [vcf] }.collect()
         ch_vcf = ch_vcf.mix(ch_vcf_files)
-        ch_vcf_idx = GATK4_HAPLOTYPECALLER.out.tbi.map{meta, idx ->[ idx ]  }.collect()
+        ch_vcf_idx = GATK4_HAPLOTYPECALLER.out.tbi.map { meta, idx -> [idx] }.collect()
         ch_vcf_idx = ch_vcf_idx.mix(ch_vcfidx_files)
-        
         ch_vcfs = ch_vcf.mix(ch_vcf_idx).collect()
 
-        GATK4_LOCALCOMBINEGVCFS(
-                                    [id:'combined', single_end:false],
-                                    ch_vcfs,
-                                    fas_file, 
-                                    fai_file, 
-                                    dict_file)
+        // Count the number of VCF files
+        vcf_count = ch_vcf_files.map { it -> 1 }.reduce { sum, count -> sum + count }
 
-        GATK_VARIANTS( 
-                        fas_file, 
-                        fai_file, 
-                        bai_file, 
-                        dict_file,
-                        GATK4_LOCALCOMBINEGVCFS.out.combined_gvcf.map{meta, vcf, tbi->[ meta ]}, 
-                        GATK4_LOCALCOMBINEGVCFS.out.gvcf, 
-                        GATK4_LOCALCOMBINEGVCFS.out.tbi 
-                    )
-        
+        vcf_count.map { count ->
+            if (count > 1000) {
+                // Use GenomeDBImport process **IMPORTANT: Discuss if  interval list is necessary or not ?
+                ch_genomicsdbimport_input = ch_vcfs.map{ meta, gvcf, tbi, intervals -> [ [ id:'joint_variant_calling', intervals_name:intervals.baseName, num_intervals:meta.num_intervals ], gvcf, tbi, intervals ] }
+                                            .groupTuple(by:3) //join on interval file
+                                            .map{ meta_list, gvcf, tbi, intervals ->
+                                                [ meta_list[0], gvcf, tbi, intervals, [], [] ]
+                                            }
+
+                GATK4_GENOMICSDBIMPORT(
+                    ch_genomicsdbimport_input,
+                    false,
+                    false,
+                    false
+                )
+
+                GATK_VARIANTS(
+                    fas_file,
+                    fai_file,
+                    bai_file,
+                    dict_file,
+                    GATK4_GENOMICSDBIMPORT.out.genomicsdb.map { meta, vcf, tbi -> [meta] },
+                    GATK4_GENOMICSDBIMPORT.out.genomicsdb,
+                    GATK4_GENOMICSDBIMPORT.out.updatedb
+                )
+
+            } else {
+                // Use LocalCombineGVCFs process
+                GATK4_LOCALCOMBINEGVCFS(
+                    [id: 'combined', single_end: false],
+                    ch_vcfs,
+                    fas_file,
+                    fai_file,
+                    dict_file
+                )
+
+                GATK_VARIANTS(
+                    fas_file,
+                    fai_file,
+                    bai_file,
+                    dict_file,
+                    GATK4_LOCALCOMBINEGVCFS.out.combined_gvcf.map { meta, vcf, tbi -> [meta] },
+                    GATK4_LOCALCOMBINEGVCFS.out.gvcf,
+                    GATK4_LOCALCOMBINEGVCFS.out.tbi
+                )
+            }
+        }
 
         ch_versions = ch_versions.mix(GATK_VARIANTS.out.versions)
-        
-        if(params.snpeff != false){
+
+        if (params.snpeff != false) {
             SNPEFF(GATK_VARIANTS.out.filtered_vcf, params.species)
         }
 
-/*
-========================================================================================
-                          SUBWORKFLOW: Create Phylogeny 
-    take:
-        fasta                     file
-        constant_sites_string     val: string of constant sites A,C,G,T
-    emit:
-        rapidnj_tree      = rapidnj_tree     // channel: [ phylogeny ]
-        fasttree_tree     = fasttree_tree    // channel: [ phylogeny ]
-        iqtree_tree       = iqtree_tree      // channel: [ phylogeny ]
-        raxmlng_tree      = raxmlng_tree     // channel: [ phylogeny ]
-        versions          = ch_versions 
-========================================================================================
-*/
-
         SEQKIT_REPLACE(GATK_VARIANTS.out.snps_fasta) // Swap * for -
         SNPDISTS(SEQKIT_REPLACE.out.fastx)
-        if(! params.skip_phylogeny) {
-            CREATE_PHYLOGENY(SEQKIT_REPLACE.out.fastx.map{meta, fas->[fas]}, '', SNPDISTS.out.tsv)
+        if (!params.skip_phylogeny) {
+            CREATE_PHYLOGENY(SEQKIT_REPLACE.out.fastx.map { meta, fas -> [fas] }, '', SNPDISTS.out.tsv)
         }
-  
     }
 
      CUSTOM_DUMPSOFTWAREVERSIONS (
